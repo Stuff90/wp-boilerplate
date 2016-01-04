@@ -2,7 +2,7 @@
   "name": "theme",
   "version": "1.0.0",
   "description": "Theme",
-  "main": "gulpfile.js",
+  "main": "index.php",
   "author": "simon@ileotech.com",
   "devDependencies": {
     "bower-files": "^3.11.3",
