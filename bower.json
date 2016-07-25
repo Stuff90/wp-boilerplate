@@ -1,0 +1,11 @@
+{
+  "name": "faena",
+  "version": "0.0.1",
+  "devDependencies": {},
+  "dependencies": {
+    "angular": "^1.5.5",
+    "angular-ui-router": "^0.2.18",
+    "moment": "^2.13.0",
+    "angular-sanitize": "^1.5.7"
+  }
+}
