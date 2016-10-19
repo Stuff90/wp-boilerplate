@@ -5,11 +5,13 @@ import { get }  from './gulp/gulp.config';
 
 import del               from 'del';
 import gulp              from 'gulp';
+import argv              from 'yargs';
 import colors            from 'colors';
 import cssnano           from 'cssnano';
 import less              from 'gulp-less';
 import gulpPrint         from 'gulp-print';
 import uglify            from 'gulp-uglify';
+import filter            from 'gulp-filter';
 import concat            from 'gulp-concat';
 import postcss           from 'gulp-postcss';
 import browserSync       from 'browser-sync';
@@ -23,7 +25,6 @@ import groupMediaQueries from 'less-plugin-group-css-media-queries';
 // import tslint      from 'gulp-tslint';
 // import typscript   from 'gulp-typescript';
 
-
 const theBrowserSync = browserSync.create();
 
 
@@ -32,7 +33,9 @@ const theBrowserSync = browserSync.create();
 ===============================*/
 
 
-gulp.task('default' , gulpSequence( 'php' , [ 'js:vendors' , 'js:dev'  , 'less:dev'  , 'browser-sync:init' ] , 'watch' ));
+gulp.task('browser' , gulpSequence( 'browser-sync:init' , 'watch' ));
+gulp.task('default' , gulpSequence( 'php' , [ 'js:vendors' , 'js:dev'  , 'less:dev' ] , 'browser' ));
+gulp.task('qa'      , gulpSequence( 'php' , [ 'js:vendors' , 'js:dev'  , 'less:dev' ] ));
 gulp.task('prod'    , gulpSequence( 'php' , [ 'js:vendors' , 'js:dist' , 'less:dist' ] ));
 
 
@@ -52,7 +55,7 @@ gulp.task('build' , [] , () => {
 
 gulp.task('browser-sync:init' , () => {
     theBrowserSync.init({
-        proxy: get('proxy')
+        proxy: get('proxy', getSiteName())
     });
 });
 
@@ -61,13 +64,15 @@ gulp.task('watch:less' , [ 'less:dev' ]);
 gulp.task('watch:ts'   , [ 'typescript:dev' ] , theBrowserSync.reload );
 
 gulp.task('watch' , () => {
-    gulp.watch( get( 'javascript' ).src , ['js:dev']);
-    gulp.watch( get( 'less' ).src       , ['less:dev']);
-    gulp.watch( get( 'templates' ).src  , ['php']);
+    gulp.watch( get( 'javascript' , getSiteName()).src , ['js:dev']);
+    gulp.watch( get( 'less' , getSiteName()).src       , ['less:dev']);
+    gulp.watch( get( 'templates' , getSiteName()).src  , ['php']);
 
-    gulp.watch( get( 'less' ).watch       , theBrowserSync.reload );
-    gulp.watch( get( 'templates' ).watch  , theBrowserSync.reload );
-    gulp.watch( get( 'javascript' ).watch , theBrowserSync.reload );
+    gulp.watch( get( 'less' , getSiteName()).watch       , () =>  {
+        theBrowserSync.reload({ stream: true });
+    });
+    gulp.watch( get( 'templates' , getSiteName()).watch  , theBrowserSync.reload );
+    gulp.watch( get( 'javascript' , getSiteName()).watch , theBrowserSync.reload );
 });
 
 
@@ -84,7 +89,7 @@ let transpileLess = ( env ) => {
         autoprefixer()
     ]
 
-    return gulp.src( get('less').src )
+    return gulp.src( get('less', getSiteName()).src )
         .pipe(gulpPrint(log()))
         .pipe(sourcemaps.init())
         .pipe(concat( 'style.less' ))
@@ -92,17 +97,20 @@ let transpileLess = ( env ) => {
         .pipe(gulpPrint(log( 'Transpile LESS to CSS'.underline.green.bold )))
         .pipe(less({
             plugins: [ groupMediaQueries ]
+        }).on('error', ( e , r, t ) => {
+            console.info('error',  e , r , t);
         }))
         .pipe(gulpPrint(log( 'Run PostCss tasks'.underline.green.bold )))
         .pipe(postcss( postCssConfig.concat( env === 'dev' ? [] : cssnano())))
         .pipe( env === 'dev' ? sourcemaps.write() : gulpPrint(log( 'CSS has been minified'.underline.green.bold )))
-        .pipe(gulp.dest( get('less').dest ));
+        .pipe(gulp.dest( get('less', getSiteName()).dest ));
 }
 
 
 gulp.task('less:dev' , () => {
     console.info('\n' + 'Start gathering LESS files :\n'.underline.green.bold);
-    return transpileLess( 'dev' );
+    return transpileLess( 'dev' )
+        .pipe( theBrowserSync.reload({ stream: true}));
 })
 
 
@@ -119,17 +127,17 @@ gulp.task('less:dist' , () => {
 
 gulp.task('js:dev' , () => {
     console.info('\n' + 'Start gathering JS files :\n'.underline.green.bold);
-    return gulp.src(get( 'javascript' ).src)
+    return gulp.src(get( 'javascript' , getSiteName()).src)
         .pipe(gulpPrint(log()))
         .pipe(concat( 'script.js' ))
         .pipe(gulpPrint(log( 'Concatenate into script.js'.underline.green.bold )))
         .pipe(gulpPrint(log( 'Saving'.underline.green.bold )))
-        .pipe(gulp.dest( get('javascript').dest ));
+        .pipe(gulp.dest( get('javascript', getSiteName()).dest ));
 });
 
 gulp.task('js:dist' , () => {
     console.info('\n' + 'Start gathering JS files :\n'.underline.green.bold);
-    return gulp.src(get( 'javascript' ).src)
+    return gulp.src(get( 'javascript' , getSiteName()).src)
         .pipe(gulpPrint(log()))
         .pipe(concat( 'script.js' ))
         .pipe(gulpPrint(log( 'Concatenate into script.js'.underline.green.bold )))
@@ -137,7 +145,7 @@ gulp.task('js:dist' , () => {
             mangle: true
         }))
         .pipe(gulpPrint(log( 'Uglifing & save'.underline.green.bold )))
-        .pipe(gulp.dest( get('javascript').dest ));
+        .pipe(gulp.dest( get('javascript', getSiteName()).dest ));
 });
 
 
@@ -147,7 +155,7 @@ gulp.task('js:dist' , () => {
 
 let transpileTypescript = function() {
     console.info('\n' + 'Start transpiling of all TS files :\n'.underline.green.bold);
-    return gulp.src(get( 'typescript' ).src)
+    return gulp.src(get( 'typescript' , getSiteName()).src)
         .pipe(gulpPrint(log()))
         .pipe(tslint({
             configuration: "tslint.json"
@@ -164,7 +172,7 @@ let transpileTypescript = function() {
 
 gulp.task('typescript:dev' , () => {
     return transpileTypescript().js
-        .pipe(concat(get( 'typescript' ).dest))
+        .pipe(concat(get( 'typescript' , getSiteName()).dest))
         .pipe(sourcemaps.write())
         .pipe(gulpPrint(log( 'Generate sourcemaps & save'.underline.green.bold )))
         .pipe(gulp.dest('./'));
@@ -172,7 +180,7 @@ gulp.task('typescript:dev' , () => {
 
 gulp.task('typescript:dist' , () => {
     return transpileTypescript().js
-        .pipe(concat(get( 'typescript' ).dest))
+        .pipe(concat(get( 'typescript' , getSiteName()).dest))
         .pipe(uglify())
         .pipe(gulpPrint(log( 'Uglifing & save'.underline.green.bold )))
         .pipe(gulp.dest('./'));
@@ -184,14 +192,18 @@ gulp.task('typescript:dist' , () => {
 ==================================*/
 
 gulp.task('js:vendors' , () => {
+    var bowerFiles = mainBower();
+    var files = bowerFiles.concat(get('locales', getSiteName()).src);
+
     console.info('\n' + 'Retrieving bower main files :\n'.underline.green.bold);
-    return gulp.src(mainBower())
+    return gulp.src(files)
+            .pipe(filter('**/*.js'))
             .pipe(gulpPrint(log()))
             .pipe(concat( 'vendors.js' ))
             .pipe(gulpPrint(log( 'Concatenate into vendors.js'.underline.green.bold )))
             .pipe(uglify())
             .pipe(gulpPrint(log( 'Uglifing & save'.underline.green.bold )))
-            .pipe(gulp.dest( get('javascript').dest ));
+            .pipe(gulp.dest( get('javascript', getSiteName()).dest ));
 });
 
 
@@ -201,9 +213,9 @@ gulp.task('js:vendors' , () => {
 
 gulp.task('php' , () => {
     console.info('\n' + 'Gather php templates:\n'.underline.green.bold );
-    return gulp.src( get( 'templates' ).src )
+    return gulp.src( get( 'templates' , getSiteName()).src )
         .pipe(gulpPrint(log()))
-        .pipe(gulp.dest( get('templates').dest ));
+        .pipe(gulp.dest( get('templates', getSiteName()).dest ));
 });
 
 
@@ -212,7 +224,7 @@ gulp.task('php' , () => {
 =============================*/
 
 gulp.task('clean' , () => {
-    let theSrc = get( 'clean' );
+    let theSrc = get( 'clean' , getSiteName());
 
     return del( theSrc ).then(() => {
         console.info('');
@@ -235,6 +247,14 @@ function log( msg ) {
     return (  filePath  ) => {
         console.info( msg ? '\n' + msg + '\n' : ' - ' + filePath.italic );
     }
+}
+
+function getSiteName() {
+    let siteIndex = process.argv.indexOf('--site');
+    if (siteIndex >= 0 && process.argv[ siteIndex + 1 ]) {
+        return process.argv[ siteIndex + 1 ]
+    }
+    return 'default';
 }
 
 
